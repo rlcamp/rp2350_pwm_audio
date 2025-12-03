@@ -39,6 +39,27 @@ static float cmagsquaredf(const float complex x) {
     return crealf(x) * crealf(x) + cimagf(x) * cimagf(x);
 }
 
+static uint64_t xorshift64star(void) {
+    /* marsaglia et al., yields 64 bits, most significant are most random */
+    static uint64_t x = 1; /* must be nonzero */
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    return x * 0x2545F4914F6CDD1DULL;
+}
+
+static float frand_minus_frand(void) {
+    /* generate 64 random bits, of which we will use the most significant 46, in two groups of 23 */
+    const uint64_t bits = xorshift64star();
+
+    /* generate two random numbers each uniformly distributed on [1.0f, 2.0f) */
+    const union { uint32_t u; float f; } x = { .u = 0x3F800000U | ((bits >> 41) & 0x7FFFFFU) };
+    const union { uint32_t u; float f; } y = { .u = 0x3F800000U | ((bits >> 18) & 0x7FFFFFU) };
+
+    /* and subtract them, yielding a triangular distribution on (-1.0f, +1.0f) */
+    return x.f - y.f;
+}
+
 int main() {
     set_sys_clock_48mhz();
 
@@ -103,7 +124,7 @@ int main() {
             carrier = carrier * (3.0f - cmagsquaredf(carrier)) / 2.0f;
 
             /* map [-1.0, 1.0] to [0, TOP] */
-            dst[ival] = ((0.5f + 0.5f * sample) * TOP) + 0.5f;
+            dst[ival] = ((0.5f + 0.5f * sample) * TOP) + 0.5f + frand_minus_frand();
         }
 
         /* if we just filled the first chunk and have not enabled the pwm yet, enable it */
