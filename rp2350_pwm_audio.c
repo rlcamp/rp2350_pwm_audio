@@ -103,9 +103,8 @@ int main() {
     /* this will evolve along the unit circle */
     float complex carrier = -1.0f;
 
-    size_t ichunk_filled = 0;
-    while (1) {
-        uint16_t * const dst = buffer[ichunk_filled % 2];
+    for (size_t ichunk = 0;; ichunk++) {
+        uint16_t * const dst = buffer[ichunk % 2];
         for (size_t ival = 0; ival < SAMPLES_PER_CHUNK; ival++) {
             const float sample = crealf(carrier) * tone_amplitude;
 
@@ -120,7 +119,7 @@ int main() {
         }
 
         /* if we just filled the first chunk and have not enabled the pwm yet, enable it */
-        if (0 == ichunk_filled && !(pwm_hw->slice[slice_num].csr & (1U << PWM_CH0_CSR_EN_LSB)))
+        if (0 == ichunk && !(pwm_hw->slice[slice_num].csr & (1U << PWM_CH0_CSR_EN_LSB)))
             pwm_init(slice_num, &config, true);
         else {
             /* run other tasks or low power sleep until next dma interrupt */
@@ -131,7 +130,5 @@ int main() {
             dma_hw->ints0 = 1U << IDMA_PWM;
             irq_clear(DMA_IRQ_0);
         }
-
-        ichunk_filled++;
     }
 }
