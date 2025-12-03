@@ -27,14 +27,6 @@ __attribute((aligned(sizeof(uint16_t) * 2 * SAMPLES_PER_CHUNK)))
 static uint16_t buffer[2][SAMPLES_PER_CHUNK];
 _Static_assert(1U << BUFFER_WRAP_BITS == sizeof(buffer), "wtf");
 
-static size_t ichunk_drained = 0;
-
-void __scratch_y("") pwm_dma_irq_handler(void) {
-    dma_hw->ints0 = 1U << IDMA_PWM;
-    ichunk_drained++;
-    __dsb();
-}
-
 static float cmagsquaredf(const float complex x) {
     return crealf(x) * crealf(x) + cimagf(x) * cimagf(x);
 }
@@ -61,6 +53,9 @@ static float frand_minus_frand(void) {
 }
 
 int main() {
+    /* enable sevonpend, so that we don't need nearly-empty ISRs */
+    scb_hw->scr |= M33_SCR_SEVONPEND_BITS;
+
     set_sys_clock_48mhz();
 
     gpio_set_function(PWM_PIN, GPIO_FUNC_PWM);
@@ -87,11 +82,11 @@ int main() {
                           SAMPLES_PER_CHUNK | (1U << 28),
                           false);
 
+    /* enable interrupt for dma, but leave it disabled in nvic */
     dma_channel_acknowledge_irq0(IDMA_PWM);
     dma_channel_set_irq0_enabled(IDMA_PWM, true);
     __dsb();
-    irq_set_exclusive_handler(DMA_IRQ_0, pwm_dma_irq_handler);
-    irq_set_enabled(DMA_IRQ_0, true);
+    irq_set_enabled(DMA_IRQ_0, false);
 
     dma_channel_start(IDMA_PWM);
 
@@ -110,9 +105,6 @@ int main() {
 
     size_t ichunk_filled = 0;
     while (1) {
-        /* wait until we can fill more of the tx buffer */
-        while (ichunk_filled - *(volatile size_t *)&ichunk_drained >= 2) yield();
-
         uint16_t * const dst = buffer[ichunk_filled % 2];
         for (size_t ival = 0; ival < SAMPLES_PER_CHUNK; ival++) {
             const float sample = crealf(carrier) * tone_amplitude;
@@ -130,6 +122,16 @@ int main() {
         /* if we just filled the first chunk and have not enabled the pwm yet, enable it */
         if (0 == ichunk_filled && !(pwm_hw->slice[slice_num].csr & (1U << PWM_CH0_CSR_EN_LSB)))
             pwm_init(slice_num, &config, true);
+        else {
+            /* run other tasks or low power sleep until next dma interrupt */
+            while (!(dma_hw->intr & 1U << IDMA_PWM))
+                yield();
+
+            /* acknowledge and clear the interrupt in both dma and nvic */
+            dma_hw->ints0 = 1U << IDMA_PWM;
+            irq_clear(DMA_IRQ_0);
+        }
+
         ichunk_filled++;
     }
 }
