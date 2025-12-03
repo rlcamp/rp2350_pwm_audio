@@ -8,7 +8,7 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 
-#define PWM_PIN PICO_DEFAULT_LED_PIN
+#define PWM_PIN 3
 
 #define IDMA_PWM 0
 
@@ -78,7 +78,7 @@ int main() {
     const float sample_rate = 48e6f / TOP;
 
     /* this can be any value between dc and fs/2, does not need to be an integer */
-    const float tone_frequency = 1.0f;
+    const float tone_frequency = 900.0f;
 
     const float complex advance = cexpf(I * 2.0f * (float)M_PI * tone_frequency / sample_rate);
 
