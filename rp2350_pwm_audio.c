@@ -35,7 +35,6 @@ void __scratch_y("") pwm_dma_irq_handler(void) {
     __dsb();
 }
 
-
 static float cmagsquaredf(const float complex x) {
     return crealf(x) * crealf(x) + cimagf(x) * cimagf(x);
 }
@@ -80,6 +79,9 @@ int main() {
     /* this can be any value between dc and fs/2, does not need to be an integer */
     const float tone_frequency = 900.0f;
 
+    /* multiplier relative to full scale */
+    const float tone_amplitude = 1.0f;
+
     const float complex advance = cexpf(I * 2.0f * (float)M_PI * tone_frequency / sample_rate);
 
     /* this will evolve along the unit circle */
@@ -92,7 +94,7 @@ int main() {
 
         uint16_t * const dst = buffer[ichunk_filled % 2];
         for (size_t ival = 0; ival < SAMPLES_PER_CHUNK; ival++) {
-            const float sample = crealf(carrier);
+            const float sample = crealf(carrier) * tone_amplitude;
 
             /* rotate complex sinusoid at the desired frequency */
             carrier *= advance;
