@@ -10,8 +10,6 @@
 
 #define PWM_PIN 3
 
-#define IDMA_PWM 0
-
 void yield(void) {
     /* we could do context switching here for cooperative multitasking if we wanted */
     __dsb();
@@ -67,6 +65,7 @@ int main() {
 #define TOP 1024U
     pwm_config_set_wrap(&config, TOP);
 
+#define IDMA_PWM 0
     dma_channel_claim(IDMA_PWM);
     dma_channel_config cfg = dma_channel_get_default_config(IDMA_PWM);
     channel_config_set_dreq(&cfg, pwm_get_dreq(slice_num));
@@ -114,11 +113,12 @@ int main() {
             /* renormalize carrier to unity */
             carrier = carrier * (3.0f - cmagsquaredf(carrier)) / 2.0f;
 
-            /* map [-1.0, 1.0] to [0, TOP] */
+            /* map [-1.0, 1.0] to [0, TOP] with triangular pdf dither */
             dst[ival] = ((0.5f + 0.5f * sample) * TOP) + 0.5f + frand_minus_frand();
         }
 
-        /* if we just filled the first chunk and have not enabled the pwm yet, enable it */
+        /* if we just filled the first chunk and have not enabled the pwm yet, enable it,
+         and immediately fill the next chunk without waiting for an interrupt */
         if (0 == ichunk && !(pwm_hw->slice[slice_num].csr & (1U << PWM_CH0_CSR_EN_LSB)))
             pwm_init(slice_num, &config, true);
         else {
